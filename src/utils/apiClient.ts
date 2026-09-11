@@ -394,6 +394,19 @@ export const api = {
           }
           convMap.set(other, entry);
         }
+
+        // Auto-discover contacts: any user who exchanged messages is a conversation
+        for (const otherUserId of convMap.keys()) {
+          if (!contactsList.some((c) => c.contactUserId.toLowerCase() === otherUserId.toLowerCase())) {
+            contactsList.push({
+              id: `c_auto_${otherUserId}`,
+              userId: cleanUser,
+              contactUserId: otherUserId,
+              aliasName: `@${otherUserId}`,
+              addedAt: convMap.get(otherUserId)?.lastMessage?.timestamp || Date.now(),
+            });
+          }
+        }
       } catch (e) {
         console.warn('[Firebase] message query error in getConversations:', e);
       }
@@ -483,13 +496,18 @@ export const api = {
 
     // Primary: Cloud Firestore
     try {
-      const q1 = query(collection(db, 'messages'), where('conversationId', 'in', [cId1, cId2]));
-      const snap = await getDocs(q1);
-      const msgs: Message[] = [];
-      snap.forEach((d) => {
-        msgs.push(d.data() as Message);
-      });
-      msgs.sort((a, b) => a.timestamp - b.timestamp);
+      const [snapConv, snapFromContact, snapToContact] = await Promise.all([
+        getDocs(query(collection(db, 'messages'), where('conversationId', 'in', [cId1, cId2]))).catch(() => null),
+        getDocs(query(collection(db, 'messages'), where('senderId', '==', cleanContact), where('receiverId', '==', cleanUser))).catch(() => null),
+        getDocs(query(collection(db, 'messages'), where('senderId', '==', cleanUser), where('receiverId', '==', cleanContact))).catch(() => null),
+      ]);
+
+      const msgMap = new Map<string, Message>();
+      if (snapConv) snapConv.forEach((d) => msgMap.set(d.id, d.data() as Message));
+      if (snapFromContact) snapFromContact.forEach((d) => msgMap.set(d.id, d.data() as Message));
+      if (snapToContact) snapToContact.forEach((d) => msgMap.set(d.id, d.data() as Message));
+
+      const msgs = Array.from(msgMap.values()).sort((a, b) => a.timestamp - b.timestamp);
 
       // Mark unread messages as read in Firestore
       for (const m of msgs) {
@@ -528,37 +546,77 @@ export const api = {
     photoData?: string;
     photoCaption?: string;
   }): Promise<{ message: Message }> {
+    const sId = payload.senderId.trim().toLowerCase();
+    const rId = payload.receiverId.trim().toLowerCase();
+    const convId = payload.conversationId || `${sId}_${rId}`;
+
     const newMessage: Message = {
       id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-      conversationId: payload.conversationId,
-      senderId: payload.senderId.toLowerCase(),
-      receiverId: payload.receiverId.toLowerCase(),
-      ciphertext: payload.ciphertext,
-      iv: payload.iv,
-      isPhoto: payload.isPhoto,
-      photoData: payload.photoData,
-      photoCaption: payload.photoCaption,
+      conversationId: convId,
+      senderId: sId,
+      receiverId: rId,
+      ciphertext: payload.ciphertext || '',
+      iv: payload.iv || '',
+      isPhoto: !!payload.isPhoto,
       timestamp: Date.now(),
       status: 'delivered',
     };
 
+    if (payload.photoData) {
+      newMessage.photoData = payload.photoData;
+    }
+    if (payload.photoCaption) {
+      newMessage.photoCaption = payload.photoCaption;
+    }
+
+    // Build payload with strictly NO undefined values for Firestore
+    const firestoreData: Record<string, any> = {
+      id: newMessage.id,
+      conversationId: newMessage.conversationId,
+      senderId: newMessage.senderId,
+      receiverId: newMessage.receiverId,
+      ciphertext: newMessage.ciphertext,
+      iv: newMessage.iv,
+      isPhoto: newMessage.isPhoto,
+      timestamp: newMessage.timestamp,
+      status: newMessage.status,
+    };
+    if (newMessage.photoData) {
+      firestoreData.photoData = newMessage.photoData;
+    }
+    if (newMessage.photoCaption) {
+      firestoreData.photoCaption = newMessage.photoCaption;
+    }
+
     // Primary: Cloud Firestore
     try {
-      await setDoc(doc(db, 'messages', newMessage.id), newMessage);
+      await setDoc(doc(db, 'messages', newMessage.id), firestoreData);
 
-      // Also ensure both users have each other in contacts in Firestore
-      await setDoc(
-        doc(db, 'users', newMessage.receiverId, 'contacts', newMessage.senderId),
-        {
-          id: `c_${Date.now()}`,
-          userId: newMessage.receiverId,
-          contactUserId: newMessage.senderId,
-          addedAt: Date.now(),
-        },
-        { merge: true }
-      ).catch(() => {});
+      // Mutual contacts sync in Firestore
+      await Promise.all([
+        setDoc(
+          doc(db, 'users', newMessage.receiverId, 'contacts', newMessage.senderId),
+          {
+            id: `c_${Date.now()}_r`,
+            userId: newMessage.receiverId,
+            contactUserId: newMessage.senderId,
+            addedAt: Date.now(),
+          },
+          { merge: true }
+        ).catch(() => {}),
+        setDoc(
+          doc(db, 'users', newMessage.senderId, 'contacts', newMessage.receiverId),
+          {
+            id: `c_${Date.now()}_s`,
+            userId: newMessage.senderId,
+            contactUserId: newMessage.receiverId,
+            addedAt: Date.now(),
+          },
+          { merge: true }
+        ).catch(() => {}),
+      ]);
     } catch (err) {
-      console.warn('[Firebase] sendMessage write error:', err);
+      console.error('[Firebase] sendMessage write error:', err);
     }
 
     // Cache in local db
@@ -580,13 +638,15 @@ export const api = {
         throw new Error(`Pengguna @${cleanContact} tidak ditemukan di database.`);
       }
 
-      const newContact = {
+      const newContact: { id: string; userId: string; contactUserId: string; aliasName?: string; addedAt: number } = {
         id: `c_${Date.now()}`,
         userId: cleanUser,
         contactUserId: cleanContact,
-        aliasName: aliasName || undefined,
         addedAt: Date.now(),
       };
+      if (aliasName && aliasName.trim()) {
+        newContact.aliasName = aliasName.trim();
+      }
 
       await setDoc(doc(db, 'users', cleanUser, 'contacts', cleanContact), newContact);
 

@@ -34,6 +34,9 @@ export default function App() {
   const [soundEnabled, setSoundEnabled] = useState(true);
 
   const wsRef = useRef<WebSocket | null>(null);
+  const activeContactIdRef = useRef<string | null>(activeContactId);
+  activeContactIdRef.current = activeContactId;
+  const isFirstSnapshotRef = useRef(true);
 
   // Sync current user to localStorage
   const handleUserLogin = (user: User) => {
@@ -256,54 +259,49 @@ export default function App() {
 
   // Real-time Cloud Firebase Firestore messages listener (syncs across devices on Vercel)
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser || !db) return;
 
     try {
+      const cleanUser = currentUser.id.toLowerCase();
       const q = query(
         collection(db, 'messages'),
-        where('receiverId', '==', currentUser.id.toLowerCase())
+        where('receiverId', '==', cleanUser)
       );
 
       const unsubscribe = onSnapshot(
         q,
         (snapshot) => {
-          let hasNew = false;
+          let hasNewIncoming = false;
           snapshot.docChanges().forEach((change) => {
-            if (change.type === 'added') {
-              const incoming = change.doc.data() as Message;
-              hasNew = true;
+            const incoming = change.doc.data() as Message;
+            const currentActive = activeContactIdRef.current ? activeContactIdRef.current.toLowerCase() : null;
 
-              // Update active chat messages
-              if (activeContactId && activeContactId.toLowerCase() === incoming.senderId.toLowerCase()) {
+            if (change.type === 'added' || change.type === 'modified') {
+              // If this message belongs to currently opened chat, update active messages
+              if (currentActive && (incoming.senderId.toLowerCase() === currentActive || incoming.receiverId.toLowerCase() === currentActive)) {
                 setMessages((prev) => {
-                  if (prev.some((m) => m.id === incoming.id)) return prev;
+                  const idx = prev.findIndex((m) => m.id === incoming.id);
+                  if (idx >= 0) {
+                    const next = [...prev];
+                    next[idx] = incoming;
+                    return next;
+                  }
                   return [...prev, incoming];
                 });
               }
 
-              // Update conversation list & unread count
-              setConversations((prev) => {
-                const exists = prev.some((c) => c.contactUser.id.toLowerCase() === incoming.senderId.toLowerCase());
-                if (!exists) {
-                  loadConversations(currentUser.id);
-                  return prev;
-                }
-                return prev.map((c) => {
-                  if (c.contactUser.id.toLowerCase() === incoming.senderId.toLowerCase()) {
-                    const isCurrentActive = activeContactId && activeContactId.toLowerCase() === incoming.senderId.toLowerCase();
-                    return {
-                      ...c,
-                      lastMessage: incoming,
-                      unreadCount: isCurrentActive ? 0 : c.unreadCount + 1,
-                    };
-                  }
-                  return c;
-                });
-              });
+              if (change.type === 'added' && !isFirstSnapshotRef.current && incoming.senderId.toLowerCase() !== cleanUser) {
+                hasNewIncoming = true;
+              }
             }
           });
 
-          if (hasNew) {
+          // Refresh conversations to show latest message & badges
+          loadConversations(currentUser.id);
+
+          if (isFirstSnapshotRef.current) {
+            isFirstSnapshotRef.current = false;
+          } else if (hasNewIncoming) {
             soundManager.playReceived();
           }
         },
@@ -316,7 +314,20 @@ export default function App() {
     } catch (err) {
       console.warn('[Firebase] realtime onSnapshot setup error:', err);
     }
-  }, [currentUser, activeContactId, loadConversations]);
+  }, [currentUser, loadConversations]);
+
+  // Periodic polling fallback: ensures real-time sync across mobile devices even if backgrounded
+  useEffect(() => {
+    if (!currentUser) return;
+    const pollTimer = setInterval(() => {
+      loadConversations(currentUser.id);
+      if (activeContactIdRef.current) {
+        loadMessages(currentUser.id, activeContactIdRef.current);
+      }
+    }, 3500);
+
+    return () => clearInterval(pollTimer);
+  }, [currentUser, loadConversations, loadMessages]);
 
   // Load messages when active contact changes
   useEffect(() => {
@@ -339,19 +350,22 @@ export default function App() {
   }) => {
     if (!currentUser || !activeContactId) return;
 
+    const senderIdClean = currentUser.id.trim().toLowerCase();
+    const receiverIdClean = activeContactId.trim().toLowerCase();
+
     // Encrypt message text using AES-256-GCM
     const encrypted = await encryptPayload(
       text || (photoData ? '[Foto]' : ''),
-      currentUser.id,
-      activeContactId
+      senderIdClean,
+      receiverIdClean
     );
 
-    const convId = `${currentUser.id}_${activeContactId}`;
+    const convId = `${senderIdClean}_${receiverIdClean}`;
 
     const payload = {
       conversationId: convId,
-      senderId: currentUser.id,
-      receiverId: activeContactId,
+      senderId: senderIdClean,
+      receiverId: receiverIdClean,
       ciphertext: encrypted.ciphertext,
       iv: encrypted.iv,
       isPhoto: !!photoData,
@@ -363,12 +377,15 @@ export default function App() {
       const { message } = await api.sendMessage(payload);
 
       // Optimistic update
-      setMessages((prev) => [...prev, message]);
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === message.id)) return prev;
+        return [...prev, message];
+      });
 
       // Update sidebar conversation preview
       setConversations((prev) =>
         prev.map((c) =>
-          c.contactUser.id === activeContactId ? { ...c, lastMessage: message } : c
+          c.contactUser.id.toLowerCase() === receiverIdClean ? { ...c, lastMessage: message } : c
         )
       );
 
@@ -376,7 +393,7 @@ export default function App() {
       soundManager.playSent();
     } catch (err) {
       console.error('Failed to send message:', err);
-      alert('Gagal mengirim pesan. Silakan coba lagi.');
+      alert('Gagal mengirim pesan ke server. Silakan coba lagi.');
     }
   };
 
