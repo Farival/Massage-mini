@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Shield, UserPlus, KeyRound, Sparkles, Smartphone, CheckCircle2, XCircle, Loader2, ArrowRight, Eye, EyeOff, Camera, Upload } from 'lucide-react';
+import { Shield, UserPlus, KeyRound, Sparkles, Smartphone, CheckCircle2, XCircle, Loader2, ArrowRight, Eye, EyeOff, Camera, Upload, Server } from 'lucide-react';
 import { User } from '../types';
+import { api, isStaticHost } from '../utils/apiClient';
+import { ServerConfigModal } from './ServerConfigModal';
 
 interface AuthModalProps {
   onSuccess: (user: User) => void;
@@ -38,6 +40,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess }) => {
   // Global loading & error
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showServerConfig, setShowServerConfig] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Handle custom photo upload on registration
@@ -100,8 +103,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess }) => {
     const timer = setTimeout(async () => {
       setIdChecking(true);
       try {
-        const res = await fetch(`/api/check-id/${encodeURIComponent(rawId)}`);
-        const data = await res.json();
+        const data = await api.checkId(rawId);
         if (!data.validFormat) {
           setIdStatus({ available: false, message: data.message });
         } else if (data.available) {
@@ -144,21 +146,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess }) => {
 
     setLoading(true);
     try {
-      const res = await fetch('/api/auth/create-id', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: cleanId,
-          displayName: displayName.trim(),
-          pin,
-          avatar: selectedAvatar,
-          bio,
-        }),
+      const data = await api.createId({
+        id: cleanId,
+        displayName: displayName.trim(),
+        pin,
+        avatar: selectedAvatar,
+        bio,
       });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Gagal membuat ID.');
-      }
       onSuccess(data.user);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Terjadi kesalahan.');
@@ -184,18 +178,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess }) => {
 
     setLoading(true);
     try {
-      const res = await fetch('/api/auth/connect-id', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: cleanId,
-          pin: connectPin,
-        }),
+      const data = await api.connectId({
+        id: cleanId,
+        pin: connectPin,
       });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Gagal menyambungkan ID.');
-      }
       onSuccess(data.user);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Gagal menyambungkan ID.');
@@ -216,6 +202,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess }) => {
       <div id="auth-card" className="w-full max-w-md my-auto bg-[#111b21] border border-[#222e35] rounded-2xl shadow-2xl overflow-hidden flex flex-col">
         {/* Header Branding */}
         <div className="bg-[#202c33] px-6 py-6 border-b border-[#222e35] text-center relative">
+          {/* Server Config Button */}
+          <button
+            type="button"
+            onClick={() => setShowServerConfig(true)}
+            title="Konfigurasi Server & Hosting"
+            className="absolute top-3.5 right-3.5 p-1.5 rounded-lg bg-[#111b21]/70 hover:bg-[#111b21] text-[#8696a0] hover:text-[#00a884] border border-[#222e35] text-[11px] flex items-center gap-1 cursor-pointer transition"
+          >
+            <Server className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Server</span>
+          </button>
+
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-[#00a884]/15 border border-[#00a884]/30 text-[#00a884] mb-3">
             <Shield className="w-8 h-8" />
           </div>
@@ -228,6 +225,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess }) => {
           <p className="text-xs text-[#8696a0] mt-1">
             Chatting aman berbasis ID unik tanpa membagikan nomor telepon
           </p>
+
+          {isStaticHost() && (
+            <div className="mt-2.5 text-[11px] text-amber-300 bg-amber-400/10 border border-amber-400/20 py-1.5 px-3 rounded-lg flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                Mode Statis (GitHub Pages)
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowServerConfig(true)}
+                className="text-[#00a884] underline font-semibold cursor-pointer"
+              >
+                Atur Server
+              </button>
+            </div>
+          )}
 
           {/* Mode Switcher Tabs */}
           <div className="flex bg-[#111b21] p-1 rounded-xl mt-4 border border-[#2a3942]">
@@ -561,6 +574,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess }) => {
           </div>
         </div>
       </div>
+
+      {showServerConfig && (
+        <ServerConfigModal onClose={() => setShowServerConfig(false)} />
+      )}
     </div>
   );
 };

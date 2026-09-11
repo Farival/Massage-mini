@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { User } from '../types';
 import { CameraCaptureModal } from './CameraCaptureModal';
+import { api } from '../utils/apiClient';
 
 interface ProfileModalProps {
   currentUser: User;
@@ -117,20 +118,11 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
     setError(null);
 
     try {
-      const res = await fetch(`/api/users/${currentUser.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          displayName: displayName.trim(),
-          bio: bio.trim(),
-          avatar,
-        }),
+      const data = await api.updateUser(currentUser.id, {
+        displayName: displayName.trim(),
+        bio: bio.trim(),
+        avatar,
       });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Gagal menyimpan profil.');
-      }
 
       onUpdateUser(data.user);
       setSuccess(true);

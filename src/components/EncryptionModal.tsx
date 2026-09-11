@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ShieldCheck, Lock, Database, RefreshCw, X, FileKey, CheckCircle2, Eye, Server } from 'lucide-react';
 import { User } from '../types';
+import { api } from '../utils/apiClient';
 
 interface EncryptionModalProps {
   currentUser: User;
@@ -29,8 +30,7 @@ export const EncryptionModal: React.FC<EncryptionModalProps> = ({ currentUser, o
   const fetchDbInspect = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/database-inspect');
-      const data = await res.json();
+      const data = await api.getDatabaseInspect();
       setDbData(data);
     } catch (e) {
       console.error(e);

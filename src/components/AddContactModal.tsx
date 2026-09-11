@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { UserPlus, Search, X, Check, Loader2, UserCheck, AlertCircle, MessageSquare } from 'lucide-react';
 import { User } from '../types';
+import { api } from '../utils/apiClient';
 
 interface AddContactModalProps {
   currentUser: User;
@@ -23,10 +24,9 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({
 
   // Fetch available IDs in database for suggestion chips
   useEffect(() => {
-    fetch('/api/database-inspect')
-      .then((res) => res.json())
+    api.getDatabaseInspect()
       .then((data) => {
-        if (data.allUserIds) {
+        if (data && data.allUserIds) {
           const filtered = data.allUserIds.filter(
             (id: string) => id.toLowerCase() !== currentUser.id.toLowerCase()
           );
@@ -52,9 +52,7 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({
     setFoundUser(null);
 
     try {
-      const res = await fetch(`/api/check-id/${encodeURIComponent(cleanId)}`);
-      const data = await res.json();
-
+      const data = await api.checkId(cleanId);
       if (data.exists && data.user) {
         setFoundUser(data.user);
       } else {
@@ -76,18 +74,7 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({
     setError(null);
 
     try {
-      const res = await fetch(`/api/users/${currentUser.id}/contacts`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contactId: foundUser.id,
-          aliasName: aliasName.trim() || undefined,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Gagal menambahkan kontak.');
-      }
+      await api.addContact(currentUser.id, foundUser.id, aliasName.trim() || undefined);
       onContactAdded(foundUser);
       onClose();
     } catch (err: unknown) {

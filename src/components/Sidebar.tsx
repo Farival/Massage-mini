@@ -13,9 +13,11 @@ import {
   Sparkles,
   ExternalLink,
   Camera,
+  Server,
 } from 'lucide-react';
 import { User, Conversation } from '../types';
 import { soundManager } from '../utils/audio';
+import { isStaticHost } from '../utils/apiClient';
 
 interface SidebarProps {
   currentUser: User;
@@ -25,6 +27,7 @@ interface SidebarProps {
   onOpenProfile: () => void;
   onOpenAddContact: () => void;
   onOpenEncryptionModal: () => void;
+  onOpenServerModal?: () => void;
   onLogout: () => void;
   soundEnabled: boolean;
   onToggleSound: () => void;
@@ -38,6 +41,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenProfile,
   onOpenAddContact,
   onOpenEncryptionModal,
+  onOpenServerModal,
   onLogout,
   soundEnabled,
   onToggleSound,
@@ -159,6 +163,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <Shield className="w-5 h-5" />
           </button>
 
+          {/* Server & Hosting Status */}
+          {onOpenServerModal && (
+            <button
+              onClick={onOpenServerModal}
+              title="Status Server & Hosting"
+              className="p-2 rounded-full hover:bg-[#374248] hover:text-[#00a884] transition cursor-pointer"
+            >
+              <Server className="w-5 h-5" />
+            </button>
+          )}
+
           {/* Sound Toggle */}
           <button
             onClick={onToggleSound}
@@ -198,6 +213,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {copiedId ? 'Tersalin ✓' : 'Salin ID'}
         </button>
       </div>
+
+      {/* Static Host Notice if on GitHub Pages */}
+      {isStaticHost() && (
+        <div className="bg-[#1f2c34] px-4 py-1.5 border-b border-[#2a3942] flex items-center justify-between text-[11px] text-[#8696a0]">
+          <span className="flex items-center gap-1.5 truncate">
+            <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0 animate-pulse" />
+            <span className="truncate">Mode Statis GitHub Pages</span>
+          </span>
+          {onOpenServerModal && (
+            <button
+              onClick={onOpenServerModal}
+              className="text-[#00a884] font-semibold hover:underline shrink-0 ml-2 cursor-pointer"
+            >
+              Info / Sambung Server
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Search & Filter Bar */}
       <div className="p-2.5 bg-[#111b21] space-y-2 border-b border-[#222e35]/50">

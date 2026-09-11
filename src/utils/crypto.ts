@@ -127,8 +127,22 @@ export async function decryptPayload(
  * Simple hashing helper for PIN / Passcode
  */
 export async function hashPin(pin: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(`PIN_SALT_${pin}`);
-  const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
-  return bufferToBase64(hashBuffer);
+  if (typeof window !== 'undefined' && window.crypto && window.crypto.subtle) {
+    try {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(`PIN_SALT_${pin}`);
+      const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
+      return bufferToBase64(hashBuffer);
+    } catch {
+      // fallback to JS hash
+    }
+  }
+
+  // Safe fallback hash for older browsers or non-secure contexts
+  let h = 0;
+  const str = `PIN_SALT_${pin}`;
+  for (let i = 0; i < str.length; i++) {
+    h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
+  }
+  return 'legacy_' + Math.abs(h).toString(16);
 }

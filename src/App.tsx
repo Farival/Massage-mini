@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Globe, Server } from 'lucide-react';
 import { User, Conversation, Message, WSServerMessage } from './types';
 import { AuthModal } from './components/AuthModal';
 import { Sidebar } from './components/Sidebar';
@@ -6,8 +7,10 @@ import { ChatWindow } from './components/ChatWindow';
 import { AddContactModal } from './components/AddContactModal';
 import { ProfileModal } from './components/ProfileModal';
 import { EncryptionModal } from './components/EncryptionModal';
+import { ServerConfigModal } from './components/ServerConfigModal';
 import { encryptPayload } from './utils/crypto';
 import { soundManager } from './utils/audio';
+import { api, isStaticHost, getCustomBackendUrl } from './utils/apiClient';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -25,6 +28,7 @@ export default function App() {
   const [showAddContact, setShowAddContact] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showEncryptionModal, setShowEncryptionModal] = useState(false);
+  const [showServerModal, setShowServerModal] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -74,14 +78,11 @@ export default function App() {
     soundManager.enabled = next;
   };
 
-  // Fetch conversations from server
+  // Fetch conversations
   const loadConversations = useCallback(async (userId: string) => {
     try {
-      const res = await fetch(`/api/users/${userId}/contacts`);
-      if (res.ok) {
-        const data = await res.json();
-        setConversations(data);
-      }
+      const data = await api.getConversations(userId);
+      setConversations(data);
     } catch (err) {
       console.error('Failed to load contacts:', err);
     }
@@ -90,18 +91,8 @@ export default function App() {
   // Fetch messages for active conversation
   const loadMessages = useCallback(async (userId: string, contactId: string) => {
     try {
-      const res = await fetch(`/api/messages/${userId}/${contactId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setMessages(data);
-      }
-
-      // Mark messages as read on server
-      await fetch('/api/messages/read', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, contactId }),
-      });
+      const data = await api.getMessages(userId, contactId);
+      setMessages(data);
 
       // Clear unread count locally
       setConversations((prev) =>
@@ -110,7 +101,7 @@ export default function App() {
         )
       );
 
-      // Notify via WebSocket
+      // Notify via WebSocket if active
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
         wsRef.current.send(
           JSON.stringify({
@@ -131,8 +122,22 @@ export default function App() {
 
     loadConversations(currentUser.id);
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}`;
+    const custom = getCustomBackendUrl();
+    let wsUrl = '';
+    if (custom) {
+      const customWsProto = custom.startsWith('https:') ? 'wss:' : 'ws:';
+      const hostOnly = custom.replace(/^https?:\/\//, '');
+      wsUrl = `${customWsProto}//${hostOnly}`;
+    } else if (!isStaticHost()) {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      wsUrl = `${protocol}//${window.location.host}`;
+    }
+
+    if (!wsUrl) {
+      // In static host without custom backend, messages work via local database
+      return;
+    }
+
     let ws: WebSocket;
 
     try {
@@ -172,14 +177,13 @@ export default function App() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ userId: currentUser.id, contactId: otherParty }),
-              });
+              }).catch(() => {});
             }
 
             // Update conversations list
             setConversations((prev) => {
               const exists = prev.some((c) => c.contactUser.id === otherParty);
               if (!exists) {
-                // Refresh full contacts if from a new user
                 loadConversations(currentUser.id);
                 return prev;
               }
@@ -232,12 +236,12 @@ export default function App() {
         }
       };
 
-      ws.onerror = (e) => {
-        console.warn('WebSocket error:', e);
+      ws.onerror = () => {
+        // Silently handle fallback
       };
 
       ws.onclose = () => {
-        console.log('WebSocket closed');
+        // WebSocket closed
       };
     } catch (e) {
       console.error('WebSocket connection failure:', e);
@@ -276,7 +280,10 @@ export default function App() {
       activeContactId
     );
 
+    const convId = `${currentUser.id}_${activeContactId}`;
+
     const payload = {
+      conversationId: convId,
       senderId: currentUser.id,
       receiverId: activeContactId,
       ciphertext: encrypted.ciphertext,
@@ -287,21 +294,15 @@ export default function App() {
     };
 
     try {
-      const res = await fetch('/api/messages/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const { message } = await api.sendMessage(payload);
 
       // Optimistic update
-      setMessages((prev) => [...prev, data.message]);
+      setMessages((prev) => [...prev, message]);
 
       // Update sidebar conversation preview
       setConversations((prev) =>
         prev.map((c) =>
-          c.contactUser.id === activeContactId ? { ...c, lastMessage: data.message } : c
+          c.contactUser.id === activeContactId ? { ...c, lastMessage: message } : c
         )
       );
 
@@ -317,14 +318,10 @@ export default function App() {
   const handleDeleteContact = async (contactId: string) => {
     if (!currentUser) return;
     try {
-      const res = await fetch(`/api/users/${currentUser.id}/contacts/${contactId}`, {
-        method: 'DELETE',
-      });
-      if (res.ok) {
-        setConversations((prev) => prev.filter((c) => c.contactUser.id !== contactId));
-        if (activeContactId === contactId) {
-          setActiveContactId(null);
-        }
+      await api.deleteContact(currentUser.id, contactId);
+      setConversations((prev) => prev.filter((c) => c.contactUser.id !== contactId));
+      if (activeContactId === contactId) {
+        setActiveContactId(null);
       }
     } catch (e) {
       console.error('Failed to delete contact:', e);
@@ -368,6 +365,7 @@ export default function App() {
               onOpenProfile={() => setShowProfileModal(true)}
               onOpenAddContact={() => setShowAddContact(true)}
               onOpenEncryptionModal={() => setShowEncryptionModal(true)}
+              onOpenServerModal={() => setShowServerModal(true)}
               onLogout={handleLogout}
               soundEnabled={soundEnabled}
               onToggleSound={handleToggleSound}
@@ -420,6 +418,11 @@ export default function App() {
               currentUser={currentUser}
               onClose={() => setShowEncryptionModal(false)}
             />
+          )}
+
+          {/* Server Config & Hosting Modal */}
+          {showServerModal && (
+            <ServerConfigModal onClose={() => setShowServerModal(false)} />
           )}
         </div>
       )}
