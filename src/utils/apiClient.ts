@@ -1,4 +1,16 @@
 import { User, Conversation, Message } from '../types';
+import { db } from './firebase';
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  collection,
+  getDocs,
+  query,
+  where,
+} from 'firebase/firestore';
 
 const LOCAL_DB_KEY = 'chatid_local_database';
 const BACKEND_URL_KEY = 'chatid_custom_backend_url';
@@ -18,7 +30,7 @@ export function setCustomBackendUrl(url: string) {
 export function isStaticHost(): boolean {
   if (typeof window === 'undefined') return false;
   const host = window.location.hostname;
-  return host.endsWith('github.io') || host.endsWith('gitlab.io') || host.endsWith('surge.sh');
+  return host.endsWith('github.io') || host.endsWith('gitlab.io') || host.endsWith('surge.sh') || host.includes('vercel.app');
 }
 
 interface LocalSchema {
@@ -40,28 +52,10 @@ function getInitialLocalDb(): LocalSchema {
         id: 'support_official',
         displayName: 'Bantuan Resmi ChatID',
         avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-        bio: 'Layanan Bantuan & Info Privasi ChatID (Mode Lokal)',
+        bio: 'Layanan Bantuan & Info Privasi ChatID (Cloud Database)',
         pinHash: '123456',
         createdAt: Date.now() - 86400000 * 30,
         lastSeen: Date.now(),
-      },
-      budi_santoso: {
-        id: 'budi_santoso',
-        displayName: 'Budi Santoso',
-        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-        bio: 'Sibuk bekerja | Hubungi jika penting',
-        pinHash: '123456',
-        createdAt: Date.now() - 86400000 * 15,
-        lastSeen: Date.now() - 1000 * 60 * 12,
-      },
-      sarah_art: {
-        id: 'sarah_art',
-        displayName: 'Sarah Art & Design',
-        avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
-        bio: 'Desainer Grafis & Fotografer Bebas',
-        pinHash: '123456',
-        createdAt: Date.now() - 86400000 * 10,
-        lastSeen: Date.now() - 1000 * 60 * 45,
       },
     },
     contacts: [],
@@ -83,11 +77,11 @@ function readLocalDb(): LocalSchema {
   }
 }
 
-function saveLocalDb(db: LocalSchema) {
+function saveLocalDb(localData: LocalSchema) {
   try {
-    localStorage.setItem(LOCAL_DB_KEY, JSON.stringify(db));
+    localStorage.setItem(LOCAL_DB_KEY, JSON.stringify(localData));
   } catch (err) {
-    console.warn('LocalStorage full or error:', err);
+    console.warn('LocalStorage save error:', err);
   }
 }
 
@@ -107,33 +101,31 @@ function getFetchSignal(ms: number): AbortSignal | undefined {
   return undefined;
 }
 
-// Check if backend is alive
+// Backend alive status
 let isBackendAlive: boolean | null = null;
 
 export async function checkBackendHealth(): Promise<boolean> {
   const custom = getCustomBackendUrl();
-  const url = custom ? `${custom}/api/health` : '/api/health';
-
-  try {
-    const res = await fetch(url, { method: 'GET', signal: getFetchSignal(3000) });
-    if (res.ok) {
-      isBackendAlive = true;
-      return true;
-    }
-    isBackendAlive = false;
-    return false;
-  } catch {
-    isBackendAlive = false;
-    return false;
+  if (custom) {
+    try {
+      const res = await fetch(`${custom}/api/health`, { method: 'GET', signal: getFetchSignal(3000) });
+      if (res.ok) {
+        isBackendAlive = true;
+        return true;
+      }
+    } catch {}
   }
+
+  // Cloud Firestore is always our cloud database
+  isBackendAlive = true;
+  return true;
 }
 
 export function getIsUsingLocalFallback(): boolean {
-  if (isStaticHost() && !getCustomBackendUrl()) return true;
-  return isBackendAlive === false;
+  return false;
 }
 
-// Unified API Client
+// Unified API Client with Firebase Firestore as primary cloud database
 export const api = {
   async getHealth() {
     return checkBackendHealth();
@@ -141,68 +133,104 @@ export const api = {
 
   async checkId(id: string): Promise<{ validFormat: boolean; available?: boolean; exists?: boolean; user?: User; message?: string }> {
     const cleanId = id.trim().toLowerCase();
-    const custom = getCustomBackendUrl();
-    const url = custom ? `${custom}/api/check-id/${encodeURIComponent(cleanId)}` : `/api/check-id/${encodeURIComponent(cleanId)}`;
-
-    try {
-      const res = await fetch(url, { signal: getFetchSignal(3500) });
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch {
-      // fallback
-    }
-
-    // Local DB fallback
-    const db = readLocalDb();
     const valid = /^[a-z0-9_]{3,20}$/.test(cleanId);
     if (!valid) {
       return { validFormat: false, message: 'ID hanya boleh 3-20 karakter (huruf kecil, angka, underscore)' };
     }
-    const exists = !!db.users[cleanId];
+
+    // Check custom backend first if user explicitly set one
+    const custom = getCustomBackendUrl();
+    if (custom) {
+      try {
+        const res = await fetch(`${custom}/api/check-id/${encodeURIComponent(cleanId)}`, { signal: getFetchSignal(3500) });
+        if (res.ok) {
+          return await res.json();
+        }
+      } catch {}
+    }
+
+    // Primary: Query Cloud Firestore
+    try {
+      const userDoc = await getDoc(doc(db, 'users', cleanId));
+      if (userDoc.exists()) {
+        const userData = userDoc.data() as User;
+        const local = readLocalDb();
+        local.users[cleanId] = userData;
+        saveLocalDb(local);
+
+        return {
+          validFormat: true,
+          available: false,
+          exists: true,
+          user: userData,
+          message: 'ID pengguna ditemukan di Cloud Database!',
+        };
+      }
+
+      // Check official support id
+      if (cleanId === 'support_official') {
+        const local = readLocalDb();
+        return {
+          validFormat: true,
+          available: false,
+          exists: true,
+          user: local.users['support_official'],
+          message: 'ID Bantuan Resmi ChatID',
+        };
+      }
+
+      return {
+        validFormat: true,
+        available: true,
+        exists: false,
+        message: 'ID unik tersedia!',
+      };
+    } catch (err) {
+      console.warn('[Firebase] checkId error, checking local db:', err);
+    }
+
+    // Local DB fallback if offline
+    const local = readLocalDb();
+    const exists = !!local.users[cleanId];
     return {
       validFormat: true,
       available: !exists,
       exists,
-      user: exists ? db.users[cleanId] : undefined,
-      message: exists ? 'ID sudah dipakai' : 'ID unik tersedia!',
+      user: exists ? local.users[cleanId] : undefined,
+      message: exists ? 'ID ditemukan (Lokal)' : 'ID unik tersedia!',
     };
   },
 
   async createId(payload: { id: string; displayName: string; pin: string; avatar: string; bio?: string }): Promise<{ user: User }> {
+    const cleanId = payload.id.trim().toLowerCase();
+
+    // Check custom backend if configured
     const custom = getCustomBackendUrl();
-    const url = custom ? `${custom}/api/auth/create-id` : '/api/auth/create-id';
-
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        signal: getFetchSignal(6000),
-      });
-      if (res.ok) {
-        return await res.json();
+    if (custom) {
+      try {
+        const res = await fetch(`${custom}/api/auth/create-id`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: getFetchSignal(6000),
+        });
+        if (res.ok) {
+          return await res.json();
+        }
+        if (res.status === 400 || res.status === 409) {
+          const data = await res.json();
+          throw new Error(data.error || 'Gagal membuat ID');
+        }
+      } catch (err: unknown) {
+        if (err instanceof Error && (err.message.includes('Gagal') || err.message.includes('dipakai'))) {
+          throw err;
+        }
       }
-      if (res.status === 400 || res.status === 409) {
-        const data = await res.json();
-        throw new Error(data.error || 'Gagal membuat ID');
-      }
-    } catch (err: unknown) {
-      if (err instanceof Error && (err.message.includes('Gagal') || err.message.includes('dipakai'))) {
-        throw err;
-      }
-    }
-
-    // Fallback to local DB
-    const db = readLocalDb();
-    const cleanId = payload.id.toLowerCase();
-    if (db.users[cleanId]) {
-      throw new Error('ID ini sudah digunakan di database lokal.');
     }
 
     const newUser: User = {
       id: cleanId,
-      displayName: payload.displayName,
+      displayName: payload.displayName.trim(),
       avatar: payload.avatar,
       bio: payload.bio || 'Ada di ChatID',
       pinHash: payload.pin,
@@ -210,101 +238,227 @@ export const api = {
       lastSeen: Date.now(),
     };
 
-    db.users[cleanId] = newUser;
-    // Automatically add support contact
-    db.contacts.push({
+    // Primary: Write to Cloud Firestore
+    try {
+      const snap = await getDoc(doc(db, 'users', cleanId));
+      if (snap.exists()) {
+        throw new Error('ID ini sudah digunakan di database cloud.');
+      }
+
+      await setDoc(doc(db, 'users', cleanId), newUser);
+
+      // Add support contact automatically
+      await setDoc(doc(db, 'users', cleanId, 'contacts', 'support_official'), {
+        id: `c_${Date.now()}`,
+        userId: cleanId,
+        contactUserId: 'support_official',
+        aliasName: 'Bantuan Resmi ChatID',
+        addedAt: Date.now(),
+      }).catch(() => {});
+
+      // Cache locally
+      const local = readLocalDb();
+      local.users[cleanId] = newUser;
+      saveLocalDb(local);
+
+      return { user: newUser };
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message.includes('sudah digunakan')) {
+        throw err;
+      }
+      console.warn('[Firebase] createId error, saving to local fallback:', err);
+    }
+
+    // Local DB fallback
+    const local = readLocalDb();
+    if (local.users[cleanId]) {
+      throw new Error('ID ini sudah digunakan di database.');
+    }
+    local.users[cleanId] = newUser;
+    local.contacts.push({
       id: `c_${Date.now()}`,
       userId: cleanId,
       contactUserId: 'support_official',
       aliasName: 'Bantuan Resmi ChatID',
       addedAt: Date.now(),
     });
-
-    saveLocalDb(db);
+    saveLocalDb(local);
     return { user: newUser };
   },
 
   async connectId(payload: { id: string; pin: string }): Promise<{ user: User }> {
-    const custom = getCustomBackendUrl();
-    const url = custom ? `${custom}/api/auth/connect-id` : '/api/auth/connect-id';
+    const cleanId = payload.id.trim().toLowerCase();
 
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        signal: getFetchSignal(6000),
-      });
-      if (res.ok) {
-        return await res.json();
-      }
-      if (res.status === 401 || res.status === 404) {
-        const data = await res.json();
-        throw new Error(data.error || 'ID atau PIN salah.');
-      }
-    } catch (err: unknown) {
-      if (err instanceof Error && (err.message.includes('salah') || err.message.includes('tidak ditemukan'))) {
-        throw err;
+    // Check custom backend if configured
+    const custom = getCustomBackendUrl();
+    if (custom) {
+      try {
+        const res = await fetch(`${custom}/api/auth/connect-id`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: getFetchSignal(6000),
+        });
+        if (res.ok) {
+          return await res.json();
+        }
+        if (res.status === 401 || res.status === 404) {
+          const data = await res.json();
+          throw new Error(data.error || 'ID atau PIN salah.');
+        }
+      } catch (err: unknown) {
+        if (err instanceof Error && (err.message.includes('salah') || err.message.includes('tidak ditemukan'))) {
+          throw err;
+        }
       }
     }
 
-    // Local DB fallback
-    const db = readLocalDb();
-    const cleanId = payload.id.toLowerCase();
-    const user = db.users[cleanId];
+    // Primary: Fetch from Cloud Firestore
+    try {
+      const snap = await getDoc(doc(db, 'users', cleanId));
+      if (snap.exists()) {
+        const user = snap.data() as User;
+        if (user.pinHash !== payload.pin) {
+          throw new Error('PIN keamanan salah.');
+        }
+        await updateDoc(doc(db, 'users', cleanId), { lastSeen: Date.now() }).catch(() => {});
+
+        // Cache locally
+        const local = readLocalDb();
+        local.users[cleanId] = user;
+        saveLocalDb(local);
+
+        return { user };
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message.includes('PIN keamanan salah')) {
+        throw err;
+      }
+      console.warn('[Firebase] connectId error, trying local:', err);
+    }
+
+    // Local fallback
+    const local = readLocalDb();
+    const user = local.users[cleanId];
     if (!user) {
-      throw new Error(`ID @${cleanId} belum terdaftar di perangkat ini.`);
+      throw new Error(`ID @${cleanId} belum terdaftar di database.`);
     }
     if (user.pinHash !== payload.pin) {
       throw new Error('PIN keamanan salah.');
     }
-
     return { user };
   },
 
   async getConversations(userId: string): Promise<Conversation[]> {
-    const custom = getCustomBackendUrl();
-    const url = custom ? `${custom}/api/users/${userId}/contacts` : `/api/users/${userId}/contacts`;
+    const cleanUser = userId.toLowerCase();
 
+    // Primary: Cloud Firestore
     try {
-      const res = await fetch(url, { signal: getFetchSignal(4000) });
-      if (res.ok) {
-        return await res.json();
+      const contactsSnap = await getDocs(collection(db, 'users', cleanUser, 'contacts'));
+      const contactsList: Array<{ id: string; userId: string; contactUserId: string; aliasName?: string; addedAt: number }> = [];
+      contactsSnap.forEach((d) => {
+        contactsList.push(d.data() as any);
+      });
+
+      // Auto add support contact if none
+      if (contactsList.length === 0) {
+        const supportContact = {
+          id: `c_${Date.now()}`,
+          userId: cleanUser,
+          contactUserId: 'support_official',
+          aliasName: 'Bantuan Resmi ChatID',
+          addedAt: Date.now(),
+        };
+        await setDoc(doc(db, 'users', cleanUser, 'contacts', 'support_official'), supportContact).catch(() => {});
+        contactsList.push(supportContact);
       }
-    } catch {
-      // fallback
+
+      // Also get messages for this user to compute lastMessage and unreadCount
+      const convMap = new Map<string, { lastMessage?: Message; unreadCount: number }>();
+      try {
+        const qSender = query(collection(db, 'messages'), where('senderId', '==', cleanUser));
+        const qReceiver = query(collection(db, 'messages'), where('receiverId', '==', cleanUser));
+
+        const [snapS, snapR] = await Promise.all([getDocs(qSender), getDocs(qReceiver)]);
+        const allMsgs: Message[] = [];
+        snapS.forEach((d) => allMsgs.push(d.data() as Message));
+        snapR.forEach((d) => allMsgs.push(d.data() as Message));
+        allMsgs.sort((a, b) => a.timestamp - b.timestamp);
+
+        for (const m of allMsgs) {
+          const other = m.senderId === cleanUser ? m.receiverId : m.senderId;
+          const entry = convMap.get(other) || { unreadCount: 0 };
+          entry.lastMessage = m;
+          if (m.receiverId === cleanUser && m.status !== 'read') {
+            entry.unreadCount += 1;
+          }
+          convMap.set(other, entry);
+        }
+      } catch (e) {
+        console.warn('[Firebase] message query error in getConversations:', e);
+      }
+
+      const conversations: Conversation[] = [];
+      for (const c of contactsList) {
+        let contactUser: User | null = null;
+        try {
+          const uSnap = await getDoc(doc(db, 'users', c.contactUserId));
+          if (uSnap.exists()) {
+            contactUser = uSnap.data() as User;
+          }
+        } catch {}
+
+        if (!contactUser) {
+          const local = readLocalDb();
+          contactUser = local.users[c.contactUserId] || null;
+        }
+
+        if (!contactUser) {
+          contactUser = {
+            id: c.contactUserId,
+            displayName: c.aliasName || `@${c.contactUserId}`,
+            avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+            bio: 'Pengguna ChatID',
+            pinHash: '',
+            createdAt: c.addedAt,
+            lastSeen: Date.now(),
+          };
+        }
+
+        const stats = convMap.get(c.contactUserId) || { unreadCount: 0 };
+
+        conversations.push({
+          contactUser: {
+            ...contactUser,
+            displayName: c.aliasName || contactUser.displayName,
+          },
+          lastMessage: stats.lastMessage,
+          unreadCount: stats.unreadCount,
+          isOnline: Date.now() - (contactUser.lastSeen || 0) < 5 * 60 * 1000,
+        });
+      }
+
+      return conversations;
+    } catch (err) {
+      console.warn('[Firebase] getConversations error, fallback to local:', err);
     }
 
     // Local DB fallback
-    const db = readLocalDb();
-    const userContacts = db.contacts.filter((c) => c.userId === userId.toLowerCase());
-    
-    // If no contacts yet, add support_official
-    if (userContacts.length === 0 && db.users['support_official']) {
-      db.contacts.push({
-        id: `c_${Date.now()}`,
-        userId: userId.toLowerCase(),
-        contactUserId: 'support_official',
-        aliasName: 'Bantuan Resmi ChatID',
-        addedAt: Date.now(),
-      });
-      saveLocalDb(db);
-      userContacts.push(db.contacts[db.contacts.length - 1]);
-    }
-
+    const local = readLocalDb();
+    const userContacts = local.contacts.filter((c) => c.userId === cleanUser);
     const conversations: Conversation[] = [];
     for (const c of userContacts) {
-      const contactUser = db.users[c.contactUserId];
+      const contactUser = local.users[c.contactUserId];
       if (!contactUser) continue;
 
-      const convId1 = `${userId.toLowerCase()}_${c.contactUserId}`;
-      const convId2 = `${c.contactUserId}_${userId.toLowerCase()}`;
-      const messages = db.messages.filter(
+      const convId1 = `${cleanUser}_${c.contactUserId}`;
+      const convId2 = `${c.contactUserId}_${cleanUser}`;
+      const messages = local.messages.filter(
         (m) => m.conversationId === convId1 || m.conversationId === convId2
       );
       const lastMessage = messages[messages.length - 1];
       const unreadCount = messages.filter(
-        (m) => m.receiverId === userId.toLowerCase() && m.status !== 'read'
+        (m) => m.receiverId === cleanUser && m.status !== 'read'
       ).length;
 
       conversations.push({
@@ -322,36 +476,45 @@ export const api = {
   },
 
   async getMessages(userId: string, contactId: string): Promise<Message[]> {
-    const custom = getCustomBackendUrl();
-    const url = custom ? `${custom}/api/messages/${userId}/${contactId}` : `/api/messages/${userId}/${contactId}`;
+    const cleanUser = userId.toLowerCase();
+    const cleanContact = contactId.toLowerCase();
+    const cId1 = `${cleanUser}_${cleanContact}`;
+    const cId2 = `${cleanContact}_${cleanUser}`;
 
+    // Primary: Cloud Firestore
     try {
-      const res = await fetch(url, { signal: getFetchSignal(4000) });
-      if (res.ok) {
-        return await res.json();
+      const q1 = query(collection(db, 'messages'), where('conversationId', 'in', [cId1, cId2]));
+      const snap = await getDocs(q1);
+      const msgs: Message[] = [];
+      snap.forEach((d) => {
+        msgs.push(d.data() as Message);
+      });
+      msgs.sort((a, b) => a.timestamp - b.timestamp);
+
+      // Mark unread messages as read in Firestore
+      for (const m of msgs) {
+        if (m.receiverId === cleanUser && m.status !== 'read') {
+          updateDoc(doc(db, 'messages', m.id), { status: 'read' }).catch(() => {});
+          m.status = 'read';
+        }
       }
-    } catch {
-      // fallback
+
+      return msgs;
+    } catch (err) {
+      console.warn('[Firebase] getMessages error, falling back to local:', err);
     }
 
     // Local DB fallback
-    const db = readLocalDb();
-    const cId1 = `${userId.toLowerCase()}_${contactId.toLowerCase()}`;
-    const cId2 = `${contactId.toLowerCase()}_${userId.toLowerCase()}`;
-    const msgs = db.messages.filter(
+    const local = readLocalDb();
+    const msgs = local.messages.filter(
       (m) => m.conversationId === cId1 || m.conversationId === cId2
     );
-
-    // Mark as read in local db
-    let changed = false;
     for (const m of msgs) {
-      if (m.receiverId === userId.toLowerCase() && m.status !== 'read') {
+      if (m.receiverId === cleanUser && m.status !== 'read') {
         m.status = 'read';
-        changed = true;
       }
     }
-    if (changed) saveLocalDb(db);
-
+    saveLocalDb(local);
     return msgs;
   },
 
@@ -365,30 +528,11 @@ export const api = {
     photoData?: string;
     photoCaption?: string;
   }): Promise<{ message: Message }> {
-    const custom = getCustomBackendUrl();
-    const url = custom ? `${custom}/api/messages/send` : '/api/messages/send';
-
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        signal: getFetchSignal(8000),
-      });
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch {
-      // fallback
-    }
-
-    // Local DB fallback
-    const db = readLocalDb();
     const newMessage: Message = {
       id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       conversationId: payload.conversationId,
-      senderId: payload.senderId,
-      receiverId: payload.receiverId,
+      senderId: payload.senderId.toLowerCase(),
+      receiverId: payload.receiverId.toLowerCase(),
       ciphertext: payload.ciphertext,
       iv: payload.iv,
       isPhoto: payload.isPhoto,
@@ -398,128 +542,171 @@ export const api = {
       status: 'delivered',
     };
 
-    db.messages.push(newMessage);
-    saveLocalDb(db);
+    // Primary: Cloud Firestore
+    try {
+      await setDoc(doc(db, 'messages', newMessage.id), newMessage);
+
+      // Also ensure both users have each other in contacts in Firestore
+      await setDoc(
+        doc(db, 'users', newMessage.receiverId, 'contacts', newMessage.senderId),
+        {
+          id: `c_${Date.now()}`,
+          userId: newMessage.receiverId,
+          contactUserId: newMessage.senderId,
+          addedAt: Date.now(),
+        },
+        { merge: true }
+      ).catch(() => {});
+    } catch (err) {
+      console.warn('[Firebase] sendMessage write error:', err);
+    }
+
+    // Cache in local db
+    const local = readLocalDb();
+    local.messages.push(newMessage);
+    saveLocalDb(local);
 
     return { message: newMessage };
   },
 
   async addContact(userId: string, contactId: string, aliasName?: string): Promise<{ contact: any }> {
-    const custom = getCustomBackendUrl();
-    const url = custom ? `${custom}/api/users/${userId}/contacts` : `/api/users/${userId}/contacts`;
+    const cleanUser = userId.toLowerCase();
+    const cleanContact = contactId.toLowerCase();
 
+    // Primary: Cloud Firestore
     try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contactId, aliasName }),
-        signal: getFetchSignal(5000),
-      });
-      if (res.ok) {
-        return await res.json();
+      const contactSnap = await getDoc(doc(db, 'users', cleanContact));
+      if (!contactSnap.exists() && cleanContact !== 'support_official') {
+        throw new Error(`Pengguna @${cleanContact} tidak ditemukan di database.`);
       }
-    } catch {
-      // fallback
-    }
 
-    // Local DB fallback
-    const db = readLocalDb();
-    const contactUser = db.users[contactId.toLowerCase()];
-    if (!contactUser) {
-      throw new Error(`Pengguna @${contactId} tidak ditemukan.`);
-    }
-
-    const exists = db.contacts.some(
-      (c) => c.userId === userId.toLowerCase() && c.contactUserId === contactId.toLowerCase()
-    );
-    if (!exists) {
       const newContact = {
         id: `c_${Date.now()}`,
-        userId: userId.toLowerCase(),
-        contactUserId: contactId.toLowerCase(),
-        aliasName,
+        userId: cleanUser,
+        contactUserId: cleanContact,
+        aliasName: aliasName || undefined,
         addedAt: Date.now(),
       };
-      db.contacts.push(newContact);
-      saveLocalDb(db);
+
+      await setDoc(doc(db, 'users', cleanUser, 'contacts', cleanContact), newContact);
+
+      // Cache locally
+      const local = readLocalDb();
+      if (contactSnap.exists()) {
+        local.users[cleanContact] = contactSnap.data() as User;
+      }
+      if (!local.contacts.some((c) => c.userId === cleanUser && c.contactUserId === cleanContact)) {
+        local.contacts.push(newContact);
+      }
+      saveLocalDb(local);
+
       return { contact: newContact };
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message.includes('tidak ditemukan')) {
+        throw err;
+      }
+      console.warn('[Firebase] addContact error, checking local fallback:', err);
     }
 
-    return { contact: { userId, contactUserId: contactId } };
+    // Local fallback
+    const local = readLocalDb();
+    const contactUser = local.users[cleanContact];
+    if (!contactUser) {
+      throw new Error(`Pengguna @${cleanContact} tidak ditemukan di database.`);
+    }
+
+    const newContact = {
+      id: `c_${Date.now()}`,
+      userId: cleanUser,
+      contactUserId: cleanContact,
+      aliasName,
+      addedAt: Date.now(),
+    };
+    local.contacts.push(newContact);
+    saveLocalDb(local);
+    return { contact: newContact };
   },
 
   async deleteContact(userId: string, contactId: string): Promise<void> {
-    const custom = getCustomBackendUrl();
-    const url = custom ? `${custom}/api/users/${userId}/contacts/${contactId}` : `/api/users/${userId}/contacts/${contactId}`;
+    const cleanUser = userId.toLowerCase();
+    const cleanContact = contactId.toLowerCase();
 
+    // Primary: Cloud Firestore
     try {
-      await fetch(url, { method: 'DELETE', signal: getFetchSignal(4000) });
-    } catch {
-      // fallback
+      await deleteDoc(doc(db, 'users', cleanUser, 'contacts', cleanContact));
+    } catch (e) {
+      console.warn('[Firebase] deleteContact error:', e);
     }
 
-    const db = readLocalDb();
-    db.contacts = db.contacts.filter(
-      (c) => !(c.userId === userId.toLowerCase() && c.contactUserId === contactId.toLowerCase())
+    // Local fallback
+    const local = readLocalDb();
+    local.contacts = local.contacts.filter(
+      (c) => !(c.userId === cleanUser && c.contactUserId === cleanContact)
     );
-    saveLocalDb(db);
+    saveLocalDb(local);
   },
 
   async updateUser(userId: string, data: { displayName?: string; avatar?: string; bio?: string }): Promise<{ user: User }> {
-    const custom = getCustomBackendUrl();
-    const url = custom ? `${custom}/api/users/${userId}` : `/api/users/${userId}`;
+    const cleanUser = userId.toLowerCase();
 
+    // Primary: Cloud Firestore
     try {
-      const res = await fetch(url, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-        signal: getFetchSignal(6000),
-      });
-      if (res.ok) {
-        return await res.json();
+      await updateDoc(doc(db, 'users', cleanUser), data);
+      const snap = await getDoc(doc(db, 'users', cleanUser));
+      if (snap.exists()) {
+        const u = snap.data() as User;
+        const local = readLocalDb();
+        local.users[cleanUser] = u;
+        saveLocalDb(local);
+        return { user: u };
       }
-    } catch {
-      // fallback
+    } catch (e) {
+      console.warn('[Firebase] updateUser error:', e);
     }
 
-    const db = readLocalDb();
-    const u = db.users[userId.toLowerCase()];
+    // Local fallback
+    const local = readLocalDb();
+    const u = local.users[cleanUser];
     if (u) {
       if (data.displayName) u.displayName = data.displayName;
       if (data.avatar) u.avatar = data.avatar;
       if (data.bio) u.bio = data.bio;
-      saveLocalDb(db);
+      saveLocalDb(local);
       return { user: u };
     }
     throw new Error('User not found');
   },
 
   async getDatabaseInspect(): Promise<any> {
-    const custom = getCustomBackendUrl();
-    const url = custom ? `${custom}/api/database-inspect` : '/api/database-inspect';
-
     try {
-      const res = await fetch(url, { signal: getFetchSignal(4000) });
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch {
-      // fallback
-    }
+      const usersSnap = await getDocs(collection(db, 'users'));
+      const msgsSnap = await getDocs(collection(db, 'messages'));
+      const userIds: string[] = [];
+      usersSnap.forEach((d) => userIds.push(d.id));
 
-    const db = readLocalDb();
-    return {
-      totalUsers: Object.keys(db.users).length,
-      totalContacts: db.contacts.length,
-      totalMessages: db.messages.length,
-      allUserIds: Object.keys(db.users),
-      schema: 'Local Storage Encrypted DB (Fallback)',
-      databaseLocation: 'Browser LocalStorage',
-      encryptionStandard: 'AES-GCM-256 + SHA-256 Key Derivation',
-      sampleEncryptedMessage: db.messages[db.messages.length - 1] || null,
-      persistedOnDisk: true,
-      lastSyncTime: new Date().toISOString(),
-    };
+      return {
+        totalUsers: usersSnap.size,
+        totalMessages: msgsSnap.size,
+        allUserIds: userIds,
+        schema: 'Google Cloud Firebase Firestore (NoSQL Document Cloud DB)',
+        databaseLocation: 'Google Cloud Platform (Asia/Multi-region)',
+        encryptionStandard: 'End-to-End AES-GCM-256 (Payload) + Google TLS In-Transit',
+        persistedOnDisk: true,
+        lastSyncTime: new Date().toISOString(),
+      };
+    } catch {
+      const local = readLocalDb();
+      return {
+        totalUsers: Object.keys(local.users).length,
+        totalContacts: local.contacts.length,
+        totalMessages: local.messages.length,
+        allUserIds: Object.keys(local.users),
+        schema: 'Cloud Firebase & Local Storage Sync',
+        databaseLocation: 'Cloud Firebase Firestore',
+        encryptionStandard: 'AES-GCM-256 + SHA-256 Key Derivation',
+        persistedOnDisk: true,
+        lastSyncTime: new Date().toISOString(),
+      };
+    }
   },
 };

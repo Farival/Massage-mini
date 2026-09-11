@@ -1,0 +1,65 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with ID, display name, avatar, bio, and credentials",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique username ID" },
+        "displayName": { "type": "string", "description": "User visible name" },
+        "avatar": { "type": "string", "description": "Avatar base64 or URL" },
+        "bio": { "type": "string", "description": "User status bio" },
+        "pinHash": { "type": "string", "description": "Hashed passcode for verification" },
+        "createdAt": { "type": "number", "description": "Unix timestamp in ms" },
+        "lastSeen": { "type": "number", "description": "Unix timestamp in ms" }
+      },
+      "required": ["id", "displayName", "avatar", "pinHash", "createdAt", "lastSeen"]
+    },
+    "Contact": {
+      "title": "Contact",
+      "description": "Contact association between two users",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Contact record identifier" },
+        "userId": { "type": "string", "description": "Owner user ID" },
+        "contactUserId": { "type": "string", "description": "Friend user ID" },
+        "aliasName": { "type": "string", "description": "Custom nickname for friend" },
+        "addedAt": { "type": "number", "description": "Timestamp added" }
+      },
+      "required": ["id", "userId", "contactUserId", "addedAt"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Chat message or photo between users with end-to-end encryption",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique message ID" },
+        "conversationId": { "type": "string", "description": "Sorted pair identifier (e.g. userA_userB)" },
+        "senderId": { "type": "string", "description": "Sender username ID" },
+        "receiverId": { "type": "string", "description": "Recipient username ID" },
+        "ciphertext": { "type": "string", "description": "Encrypted message payload" },
+        "iv": { "type": "string", "description": "AES-GCM initialization vector" },
+        "isPhoto": { "type": "boolean", "description": "Whether message contains photo" },
+        "photoData": { "type": "string", "description": "Encrypted photo base64 payload" },
+        "photoCaption": { "type": "string", "description": "Encrypted or plain caption" },
+        "timestamp": { "type": "number", "description": "Timestamp in ms" },
+        "status": { "type": "string", "enum": ["sent", "delivered", "read"], "description": "Delivery status" }
+      },
+      "required": ["id", "conversationId", "senderId", "receiverId", "ciphertext", "iv", "isPhoto", "timestamp", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile documents keyed by userId"
+    },
+    "/users/{userId}/contacts/{contactId}": {
+      "schema": "Contact",
+      "description": "User contacts subcollection"
+    },
+    "/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Global messages collection partitioned by conversationId"
+    }
+  }
+}

@@ -11,6 +11,8 @@ import { ServerConfigModal } from './components/ServerConfigModal';
 import { encryptPayload } from './utils/crypto';
 import { soundManager } from './utils/audio';
 import { api, isStaticHost, getCustomBackendUrl } from './utils/apiClient';
+import { db } from './utils/firebase';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -250,6 +252,70 @@ export default function App() {
     return () => {
       if (ws) ws.close();
     };
+  }, [currentUser, activeContactId, loadConversations]);
+
+  // Real-time Cloud Firebase Firestore messages listener (syncs across devices on Vercel)
+  useEffect(() => {
+    if (!currentUser) return;
+
+    try {
+      const q = query(
+        collection(db, 'messages'),
+        where('receiverId', '==', currentUser.id.toLowerCase())
+      );
+
+      const unsubscribe = onSnapshot(
+        q,
+        (snapshot) => {
+          let hasNew = false;
+          snapshot.docChanges().forEach((change) => {
+            if (change.type === 'added') {
+              const incoming = change.doc.data() as Message;
+              hasNew = true;
+
+              // Update active chat messages
+              if (activeContactId && activeContactId.toLowerCase() === incoming.senderId.toLowerCase()) {
+                setMessages((prev) => {
+                  if (prev.some((m) => m.id === incoming.id)) return prev;
+                  return [...prev, incoming];
+                });
+              }
+
+              // Update conversation list & unread count
+              setConversations((prev) => {
+                const exists = prev.some((c) => c.contactUser.id.toLowerCase() === incoming.senderId.toLowerCase());
+                if (!exists) {
+                  loadConversations(currentUser.id);
+                  return prev;
+                }
+                return prev.map((c) => {
+                  if (c.contactUser.id.toLowerCase() === incoming.senderId.toLowerCase()) {
+                    const isCurrentActive = activeContactId && activeContactId.toLowerCase() === incoming.senderId.toLowerCase();
+                    return {
+                      ...c,
+                      lastMessage: incoming,
+                      unreadCount: isCurrentActive ? 0 : c.unreadCount + 1,
+                    };
+                  }
+                  return c;
+                });
+              });
+            }
+          });
+
+          if (hasNew) {
+            soundManager.playReceived();
+          }
+        },
+        (error) => {
+          console.warn('[Firebase] realtime onSnapshot error:', error);
+        }
+      );
+
+      return () => unsubscribe();
+    } catch (err) {
+      console.warn('[Firebase] realtime onSnapshot setup error:', err);
+    }
   }, [currentUser, activeContactId, loadConversations]);
 
   // Load messages when active contact changes
