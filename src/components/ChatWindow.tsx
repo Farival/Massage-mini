@@ -198,20 +198,20 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   if (!activeContact) {
     // Empty state when no chat is open
     return (
-      <div className="hidden md:flex flex-1 flex-col items-center justify-center bg-[#222e35] text-center p-8 border-b-6 border-[#00a884] select-none">
+      <div className="hidden md:flex flex-1 flex-col items-center justify-center bg-[#f0f2f5] text-center p-8 border-b-6 border-[#00a884] select-none">
         <div className="max-w-md flex flex-col items-center">
-          <div className="w-20 h-20 rounded-full bg-[#111b21] flex items-center justify-center text-[#00a884] mb-6 shadow-xl border border-[#2a3942]">
+          <div className="w-20 h-20 rounded-full bg-[#ffffff] flex items-center justify-center text-[#00a884] mb-6 shadow-md border border-[#cbd5e1]">
             <Shield className="w-10 h-10" />
           </div>
-          <h1 className="text-2xl font-light text-[#e9edef] mb-2 tracking-tight">
+          <h1 className="text-2xl font-bold text-[#111b21] mb-2 tracking-tight">
             ChatID untuk Web
           </h1>
-          <p className="text-xs text-[#8696a0] leading-relaxed mb-6">
+          <p className="text-xs text-[#54656f] leading-relaxed mb-6">
             Kirim dan terima pesan aman tanpa membagikan nomor telepon pribadi.
             Cukup gunakan ID unik Anda untuk terhubung ke kontak di mana saja.
           </p>
 
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#111b21]/70 border border-[#2a3942] text-[11px] text-[#8696a0]">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#ffffff] border border-[#cbd5e1] text-[11px] text-[#54656f] font-medium shadow-sm">
             <Lock className="w-3.5 h-3.5 text-[#00a884]" />
             Terenkripsi secara end-to-end (AES-256)
           </div>
@@ -220,7 +220,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
             <button
               type="button"
               onClick={onOpenProfile}
-              className="mt-6 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#202c33] hover:bg-[#2a3942] border border-[#2a3942] text-xs font-bold text-[#00a884] shadow-md transition cursor-pointer"
+              className="mt-6 inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#ffffff] hover:bg-[#f8fafc] border border-[#cbd5e1] text-xs font-bold text-[#00a884] shadow-sm transition cursor-pointer"
             >
               <Camera className="w-4 h-4" />
               <span>Ganti Foto Profil & Info Saya</span>
@@ -235,15 +235,15 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
     <main
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-      className="flex-1 h-full flex flex-col bg-[#0b141a] relative overflow-hidden"
+      className="flex-1 h-full flex flex-col bg-[#efeae2] relative overflow-hidden"
     >
       {/* Chat Header */}
-      <header className="h-16 px-4 bg-[#202c33] border-b border-[#222e35] flex items-center justify-between shrink-0 z-10 select-none">
+      <header className="h-16 px-4 bg-[#ffffff] border-b border-[#e2e8f0] flex items-center justify-between shrink-0 z-10 select-none shadow-xs">
         <div className="flex items-center gap-3 min-w-0">
           {/* Back button on mobile */}
           <button
             onClick={onBackMobile}
-            className="md:hidden p-1.5 -ml-1 text-[#8696a0] hover:text-[#e9edef] rounded-full hover:bg-[#374248]"
+            className="md:hidden p-1.5 -ml-1 text-[#54656f] hover:text-[#111b21] rounded-lg hover:bg-[#f0f2f5]"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
@@ -252,27 +252,27 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
             <img
               src={activeContact.contactUser.avatar}
               alt={activeContact.contactUser.displayName}
-              className="w-10 h-10 rounded-full object-cover"
+              className="w-10 h-10 rounded-full object-cover border border-[#cbd5e1]"
             />
             {activeContact.isOnline && (
-              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-[#00a884] border-2 border-[#202c33] rounded-full" />
+              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-[#00a884] border-2 border-[#ffffff] rounded-full" />
             )}
           </div>
 
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <h3 className="text-sm font-bold text-[#e9edef] truncate">
+              <h3 className="text-sm font-bold text-[#111b21] truncate">
                 {activeContact.contactUser.displayName}
               </h3>
-              <span className="text-[10px] text-[#8696a0] font-mono shrink-0">
+              <span className="text-[10px] text-[#64748b] font-mono shrink-0">
                 @{activeContact.contactUser.id}
               </span>
             </div>
-            <p className="text-[11px] text-[#8696a0] truncate">
+            <p className="text-[11px] text-[#64748b] truncate">
               {activeContact.isTyping ? (
                 <span className="text-[#00a884] font-medium animate-pulse">sedang mengetik...</span>
               ) : activeContact.isOnline ? (
-                <span className="text-[#00a884]">Online</span>
+                <span className="text-[#00a884] font-medium">Online</span>
               ) : (
                 'Terakhir dilihat baru saja'
               )}
@@ -281,25 +281,25 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
         </div>
 
         {/* Action icons */}
-        <div className="flex items-center gap-1 text-[#aebac1]">
+        <div className="flex items-center gap-1 text-[#54656f]">
           <button
             onClick={() => triggerCallToast('suara')}
             title="Panggilan Suara"
-            className="p-2 rounded-full hover:bg-[#374248] hover:text-[#e9edef] transition"
+            className="p-2 rounded-lg hover:bg-[#f0f2f5] hover:text-[#111b21] transition cursor-pointer"
           >
             <Phone className="w-4 h-4" />
           </button>
           <button
             onClick={() => triggerCallToast('video')}
             title="Panggilan Video"
-            className="p-2 rounded-full hover:bg-[#374248] hover:text-[#e9edef] transition"
+            className="p-2 rounded-lg hover:bg-[#f0f2f5] hover:text-[#111b21] transition cursor-pointer"
           >
             <Video className="w-4 h-4" />
           </button>
           <button
             onClick={onOpenEncryptionModal}
             title="Kunci Enkripsi Obrolan"
-            className="p-2 rounded-full hover:bg-[#374248] hover:text-[#00a884] transition"
+            className="p-2 rounded-lg hover:bg-[#f0f2f5] hover:text-[#00a884] transition cursor-pointer"
           >
             <Shield className="w-4 h-4" />
           </button>
@@ -308,18 +308,18 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
           <div className="relative">
             <button
               onClick={() => setShowOptions(!showOptions)}
-              className="p-2 rounded-full hover:bg-[#374248] hover:text-[#e9edef] transition"
+              className="p-2 rounded-lg hover:bg-[#f0f2f5] hover:text-[#111b21] transition cursor-pointer"
             >
               <MoreVertical className="w-4 h-4" />
             </button>
             {showOptions && (
-              <div className="absolute right-0 mt-2 w-48 bg-[#233138] border border-[#2a3942] rounded-xl shadow-xl py-1 z-50 text-xs">
+              <div className="absolute right-0 mt-2 w-48 bg-[#ffffff] border border-[#cbd5e1] rounded-lg shadow-xl py-1 z-50 text-xs">
                 <button
                   onClick={() => {
                     setShowOptions(false);
                     onOpenEncryptionModal();
                   }}
-                  className="w-full px-4 py-2 text-left text-[#e9edef] hover:bg-[#182229] flex items-center gap-2"
+                  className="w-full px-4 py-2 text-left text-[#111b21] hover:bg-[#f0f2f5] flex items-center gap-2 cursor-pointer"
                 >
                   <Lock className="w-3.5 h-3.5 text-[#00a884]" />
                   Verifikasi Enkripsi
@@ -331,7 +331,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
                       onDeleteContact(activeContact.contactUser.id);
                     }
                   }}
-                  className="w-full px-4 py-2 text-left text-red-400 hover:bg-[#182229] flex items-center gap-2"
+                  className="w-full px-4 py-2 text-left text-red-600 hover:bg-red-50 flex items-center gap-2 cursor-pointer"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   Hapus Kontak
@@ -344,7 +344,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
 
       {/* Notification Toast */}
       {callToast && (
-        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-40 bg-[#00a884] text-[#111b21] px-4 py-2 rounded-full font-semibold text-xs shadow-lg animate-in fade-in">
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-40 bg-[#00a884] text-white px-4 py-2 rounded-lg font-semibold text-xs shadow-lg animate-in fade-in">
           {callToast}
         </div>
       )}
@@ -353,8 +353,8 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
       <div className="flex-1 overflow-y-auto p-4 space-y-3 wa-chat-bg">
         {/* End-to-End Encryption Banner */}
         <div className="flex justify-center my-2">
-          <div className="max-w-md bg-[#182229]/90 border border-[#2a3942] rounded-lg px-3 py-2 text-center text-[11px] text-[#ffd279] shadow-sm flex items-center justify-center gap-2">
-            <Lock className="w-3.5 h-3.5 shrink-0 text-[#ffd279]" />
+          <div className="max-w-md bg-[#ffffff] border-2 border-[#fcd34d] rounded-lg px-3.5 py-2 text-center text-[11px] text-[#334155] shadow-xs flex items-center justify-center gap-2 font-medium">
+            <Lock className="w-3.5 h-3.5 shrink-0 text-[#d97706]" />
             <span>
               Pesan dan foto ke obrolan ini dienkripsi secara end-to-end dengan kunci unik ID Anda.
             </span>
@@ -375,11 +375,12 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
               key={msg.id}
               className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}
             >
+              {/* Message Bubble: Rectangular box with prominent border ("garis mengkotak") */}
               <div
-                className={`relative max-w-[85%] sm:max-w-[70%] rounded-2xl p-2.5 shadow-sm text-sm wa-message-bubble ${
+                className={`relative max-w-[85%] sm:max-w-[70%] rounded-lg p-2.5 shadow-xs text-sm wa-message-bubble border-2 ${
                   isMe
-                    ? 'bg-[#005c4b] text-[#e9edef] rounded-tr-none'
-                    : 'bg-[#202c33] text-[#e9edef] rounded-tl-none'
+                    ? 'wa-message-bubble-me bg-[#d9fdd3] text-[#111b21] border-[#86efac]'
+                    : 'wa-message-bubble-other bg-[#ffffff] text-[#111b21] border-[#cbd5e1]'
                 }`}
               >
                 {/* Photo Message */}
@@ -393,12 +394,12 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
                         timestamp: msg.timestamp,
                       })
                     }
-                    className="cursor-pointer group relative rounded-xl overflow-hidden mb-1.5 bg-black/20"
+                    className="cursor-pointer group relative rounded-md overflow-hidden mb-1.5 bg-black/10 border border-[#cbd5e1]"
                   >
                     <img
                       src={msg.photoData}
                       alt="Foto Terkirim"
-                      className="max-h-72 w-full object-cover rounded-xl transition-transform duration-200 group-hover:scale-102"
+                      className="max-h-72 w-full object-cover rounded-md transition-transform duration-200 group-hover:scale-102"
                     />
                     <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold">
                       Klik untuk memperbesar
@@ -409,27 +410,27 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
                 {/* Photo Caption or Text */}
                 {msg.isPhoto ? (
                   msg.photoCaption && (
-                    <p className="text-xs text-[#e9edef] mb-1 leading-relaxed">
+                    <p className="text-xs text-[#111b21] mb-1 font-medium leading-relaxed">
                       {msg.photoCaption}
                     </p>
                   )
                 ) : (
-                  <p className="text-xs sm:text-sm text-[#e9edef] leading-relaxed whitespace-pre-wrap">
+                  <p className="text-xs sm:text-sm text-[#111b21] font-medium leading-relaxed whitespace-pre-wrap">
                     {displayContent}
                   </p>
                 )}
 
                 {/* Meta Timestamp & Status Checks */}
                 <div className="flex items-center justify-end gap-1 mt-1 select-none">
-                  <span className="text-[10px] text-[#8696a0]">{timeString}</span>
+                  <span className="text-[10px] text-[#64748b] font-medium">{timeString}</span>
                   {isMe && (
-                    <span className="text-[#8696a0]">
+                    <span className="text-[#64748b]">
                       {msg.status === 'read' ? (
-                        <CheckCheck className="w-3.5 h-3.5 text-[#53bdeb]" />
+                        <CheckCheck className="w-3.5 h-3.5 text-[#0284c7]" />
                       ) : msg.status === 'delivered' ? (
-                        <CheckCheck className="w-3.5 h-3.5 text-[#8696a0]" />
+                        <CheckCheck className="w-3.5 h-3.5 text-[#64748b]" />
                       ) : (
-                        <Check className="w-3.5 h-3.5 text-[#8696a0]" />
+                        <Check className="w-3.5 h-3.5 text-[#64748b]" />
                       )}
                     </span>
                   )}
@@ -444,8 +445,8 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
 
       {/* Selected Photo Preview Bar before sending */}
       {selectedPhoto && (
-        <div className="bg-[#202c33] border-t border-[#2a3942] p-3 flex items-center gap-3 animate-in slide-in-from-bottom-2">
-          <div className="relative w-16 h-16 rounded-lg overflow-hidden shrink-0 border border-[#00a884]">
+        <div className="bg-[#ffffff] border-t border-[#e2e8f0] p-3 flex items-center gap-3 animate-in slide-in-from-bottom-2">
+          <div className="relative w-16 h-16 rounded-lg overflow-hidden shrink-0 border-2 border-[#00a884]">
             <img src={selectedPhoto} alt="Preview" className="w-full h-full object-cover" />
             <button
               onClick={() => setSelectedPhoto(null)}
@@ -460,7 +461,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
               value={photoCaption}
               onChange={(e) => setPhotoCaption(e.target.value)}
               placeholder="Tambahkan keterangan foto..."
-              className="w-full px-3 py-1.5 bg-[#111b21] border border-[#2a3942] focus:border-[#00a884] focus:outline-none rounded-lg text-xs text-[#e9edef]"
+              className="w-full px-3 py-1.5 bg-[#f0f2f5] border border-[#cbd5e1] focus:border-[#00a884] focus:outline-none rounded-lg text-xs text-[#111b21] placeholder-[#64748b]"
             />
           </div>
         </div>
@@ -468,7 +469,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
 
       {/* Emoji Picker Popover */}
       {showEmojis && (
-        <div className="bg-[#202c33] border-t border-[#2a3942] p-3 flex flex-wrap gap-2 animate-in slide-in-from-bottom-2">
+        <div className="bg-[#ffffff] border-t border-[#e2e8f0] p-3 flex flex-wrap gap-2 animate-in slide-in-from-bottom-2 shadow-inner">
           {COMMON_EMOJIS.map((emoji) => (
             <button
               key={emoji}
@@ -486,7 +487,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
 
       {/* WhatsApp-Style Photo Attachment Menu Popover */}
       {showAttachMenu && (
-        <div className="absolute bottom-16 left-3 sm:left-4 z-30 bg-[#202c33] border border-[#2a3942] rounded-2xl shadow-2xl p-2 flex flex-col gap-1.5 animate-in fade-in slide-in-from-bottom-2 w-52 select-none">
+        <div className="absolute bottom-16 left-3 sm:left-4 z-30 bg-[#ffffff] border border-[#cbd5e1] rounded-xl shadow-2xl p-2 flex flex-col gap-1.5 animate-in fade-in slide-in-from-bottom-2 w-52 select-none">
           {/* Option 1: Live Camera / Memfoto Langsung */}
           <button
             type="button"
@@ -494,16 +495,16 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
               setShowAttachMenu(false);
               setShowCameraModal(true);
             }}
-            className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-[#2a3942] transition cursor-pointer text-left group"
+            className="w-full flex items-center gap-3 p-2.5 rounded-lg hover:bg-[#f0f2f5] transition cursor-pointer text-left group"
           >
-            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-[#d33a67] to-[#ec4899] text-white flex items-center justify-center shadow-md group-hover:scale-105 transition-transform shrink-0">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-[#d33a67] to-[#ec4899] text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform shrink-0">
               <Camera className="w-5 h-5" />
             </div>
             <div>
-              <p className="text-xs font-bold text-[#e9edef] group-hover:text-[#00a884] transition">
+              <p className="text-xs font-bold text-[#111b21] group-hover:text-[#00a884] transition">
                 Kamera
               </p>
-              <p className="text-[10px] text-[#8696a0]">Ambil foto langsung</p>
+              <p className="text-[10px] text-[#64748b]">Ambil foto langsung</p>
             </div>
           </button>
 
@@ -514,23 +515,23 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
               setShowAttachMenu(false);
               fileInputRef.current?.click();
             }}
-            className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-[#2a3942] transition cursor-pointer text-left group"
+            className="w-full flex items-center gap-3 p-2.5 rounded-lg hover:bg-[#f0f2f5] transition cursor-pointer text-left group"
           >
-            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-[#6366f1] to-[#8b5cf6] text-white flex items-center justify-center shadow-md group-hover:scale-105 transition-transform shrink-0">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-[#6366f1] to-[#8b5cf6] text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform shrink-0">
               <ImageIcon className="w-5 h-5" />
             </div>
             <div>
-              <p className="text-xs font-bold text-[#e9edef] group-hover:text-[#00a884] transition">
+              <p className="text-xs font-bold text-[#111b21] group-hover:text-[#00a884] transition">
                 Galeri
               </p>
-              <p className="text-[10px] text-[#8696a0]">Pilih foto dari HP/PC</p>
+              <p className="text-[10px] text-[#64748b]">Pilih foto dari HP/PC</p>
             </div>
           </button>
         </div>
       )}
 
       {/* Chat Footer / Input Form */}
-      <footer className="px-3 py-2 bg-[#202c33] border-t border-[#222e35] shrink-0">
+      <footer className="px-3 py-2 bg-[#ffffff] border-t border-[#e2e8f0] shrink-0 shadow-xs">
         <form onSubmit={handleSend} className="flex items-center gap-1.5 sm:gap-2">
           {/* Hidden File Input */}
           <input
@@ -548,7 +549,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
               setShowEmojis(!showEmojis);
               setShowAttachMenu(false);
             }}
-            className="p-2 text-[#8696a0] hover:text-[#e9edef] rounded-full hover:bg-[#374248] transition cursor-pointer"
+            className="p-2 text-[#54656f] hover:text-[#111b21] rounded-lg hover:bg-[#f0f2f5] transition cursor-pointer"
           >
             <Smile className="w-5 h-5" />
           </button>
@@ -561,10 +562,10 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
               setShowEmojis(false);
             }}
             title="Kirim Foto (Galeri atau Kamera)"
-            className={`p-2 rounded-full transition cursor-pointer ${
+            className={`p-2 rounded-lg transition cursor-pointer ${
               showAttachMenu
-                ? 'bg-[#374248] text-[#00a884]'
-                : 'text-[#8696a0] hover:text-[#00a884] hover:bg-[#374248]'
+                ? 'bg-[#f0f2f5] text-[#00a884]'
+                : 'text-[#54656f] hover:text-[#00a884] hover:bg-[#f0f2f5]'
             }`}
           >
             <Paperclip className="w-5 h-5" />
@@ -579,13 +580,13 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
               setShowEmojis(false);
             }}
             title="Ambil Foto Langsung (Kamera)"
-            className="p-2 text-[#8696a0] hover:text-[#00a884] rounded-full hover:bg-[#374248] transition cursor-pointer"
+            className="p-2 text-[#54656f] hover:text-[#00a884] rounded-lg hover:bg-[#f0f2f5] transition cursor-pointer"
           >
             <Camera className="w-5 h-5" />
           </button>
 
           {/* Text Input */}
-          <div className="flex-1 bg-[#2a3942] rounded-xl flex items-center px-3 py-1.5">
+          <div className="flex-1 bg-[#f0f2f5] border border-[#cbd5e1] focus-within:border-[#00a884] rounded-lg flex items-center px-3 py-1.5 transition">
             <input
               type="text"
               value={inputText}
@@ -595,7 +596,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
                 setShowEmojis(false);
               }}
               placeholder="Ketik pesan..."
-              className="w-full bg-transparent border-none text-xs sm:text-sm text-[#e9edef] placeholder-[#8696a0] focus:outline-none"
+              className="w-full bg-transparent border-none text-xs sm:text-sm text-[#111b21] placeholder-[#64748b] focus:outline-none"
             />
           </div>
 
@@ -603,7 +604,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
           <button
             type="submit"
             disabled={sending || (!inputText.trim() && !selectedPhoto)}
-            className="p-2.5 rounded-full bg-[#00a884] hover:bg-[#00a884]/90 disabled:opacity-50 text-[#111b21] transition shadow-md cursor-pointer shrink-0"
+            className="p-2.5 rounded-lg bg-[#00a884] hover:bg-[#00a884]/90 disabled:opacity-50 text-white transition shadow-sm cursor-pointer shrink-0"
           >
             {sending ? (
               <Loader2 className="w-4 h-4 animate-spin" />

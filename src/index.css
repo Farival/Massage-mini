@@ -27,15 +27,31 @@
   background: rgba(134, 150, 160, 0.4);
 }
 
-/* Chat Wallpaper pattern */
+/* Chat Wallpaper pattern - Light clean background with high contrast */
 .wa-chat-bg {
-  background-color: #0b141a;
-  background-image: radial-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 0);
-  background-size: 24px 24px;
+  background-color: #efeae2;
+  background-image: radial-gradient(rgba(0, 0, 0, 0.06) 1px, transparent 0);
+  background-size: 20px 20px;
 }
 
-/* Clean text-break for chat bubbles */
+/* Chat bubble styling: rectangular box with clean outline borders ("garis mengkotak") */
 .wa-message-bubble {
   word-break: break-word;
   overflow-wrap: anywhere;
+  border-radius: 8px !important;
+  transition: transform 0.1s ease;
+}
+
+.wa-message-bubble-me {
+  background-color: #d9fdd3 !important;
+  color: #111b21 !important;
+  border: 2px solid #86efac !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.wa-message-bubble-other {
+  background-color: #ffffff !important;
+  color: #111b21 !important;
+  border: 2px solid #cbd5e1 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
