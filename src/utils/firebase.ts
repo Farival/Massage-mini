@@ -1,15 +1,24 @@
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, doc, getDocFromServer, getDoc, setDoc } from 'firebase/firestore';
+import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
+import { getFirestore, doc, getDocFromServer, getDoc, setDoc, Firestore } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+let app: FirebaseApp | null = null;
+let firestoreDb: Firestore | null = null;
 
-export const db = firebaseConfig.firestoreDatabaseId
-  ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
-  : getFirestore(app);
+try {
+  app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+  firestoreDb = firebaseConfig.firestoreDatabaseId
+    ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+    : getFirestore(app);
+} catch (e) {
+  console.warn('[Firebase] Initialization error or legacy environment fallback:', e);
+}
+
+export const db = firestoreDb as Firestore;
 
 // Test Firestore connection on boot
 export async function testFirestoreConnection(): Promise<boolean> {
+  if (!db) return false;
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
     console.log('[Firebase] Firestore connected successfully to database:', firebaseConfig.firestoreDatabaseId || '(default)');
@@ -26,6 +35,7 @@ export async function testFirestoreConnection(): Promise<boolean> {
 }
 
 async function ensureSupportAccount() {
+  if (!db) return;
   try {
     const supportRef = doc(db, 'users', 'support_official');
     const snap = await getDoc(supportRef);
@@ -45,4 +55,8 @@ async function ensureSupportAccount() {
   }
 }
 
-testFirestoreConnection();
+try {
+  testFirestoreConnection();
+} catch (e) {
+  console.warn('[Firebase] Test connection failed:', e);
+}

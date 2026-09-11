@@ -4,7 +4,10 @@
  */
 
 // Deterministic conversation secret key derivation
-async function getConversationKey(userId1: string, userId2: string): Promise<CryptoKey> {
+async function getConversationKey(userId1: string, userId2: string): Promise<CryptoKey | null> {
+  if (typeof window === 'undefined' || !window.crypto || !window.crypto.subtle) {
+    return null;
+  }
   const sortedIds = [userId1.toLowerCase(), userId2.toLowerCase()].sort().join(':::');
   const encoder = new TextEncoder();
   const keyMaterial = await window.crypto.subtle.digest(
@@ -56,6 +59,12 @@ export async function encryptPayload(
 ): Promise<EncryptedPayload> {
   try {
     const key = await getConversationKey(userA, userB);
+    if (!key || !window.crypto || !window.crypto.subtle) {
+      return {
+        ciphertext: bufferToBase64(new TextEncoder().encode(plaintext)),
+        iv: 'plain-fallback',
+      };
+    }
     const iv = window.crypto.getRandomValues(new Uint8Array(12)); // 96-bit IV recommended for GCM
     const encoder = new TextEncoder();
     const encoded = encoder.encode(plaintext);
@@ -93,7 +102,7 @@ export async function decryptPayload(
   userB: string
 ): Promise<string> {
   if (!ciphertext) return '';
-  if (iv === 'plain-fallback') {
+  if (iv === 'plain-fallback' || !window.crypto || !window.crypto.subtle) {
     try {
       return new TextDecoder().decode(base64ToBuffer(ciphertext));
     } catch {
@@ -103,6 +112,13 @@ export async function decryptPayload(
 
   try {
     const key = await getConversationKey(userA, userB);
+    if (!key) {
+      try {
+        return new TextDecoder().decode(base64ToBuffer(ciphertext));
+      } catch {
+        return ciphertext;
+      }
+    }
     const ivBuffer = base64ToBuffer(iv);
     const cipherBuffer = base64ToBuffer(ciphertext);
 
