@@ -1,0 +1,6 @@
+{
+  "name": "ChatID Messenger",
+  "description": "Aplikasi chatting bergaya WhatsApp berbasis ID unik dengan enkripsi pesan, kirim foto, sinkronisasi ID, dan database riwayat chat.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
